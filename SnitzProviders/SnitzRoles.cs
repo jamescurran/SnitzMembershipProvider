@@ -9,30 +9,26 @@ using System.Collections.Specialized;
 using System.Data;
 using System.Configuration.Provider;
 using System.Diagnostics;
+using System.IO;
+using System.Data.Linq;
+using System.Linq.Expressions;
+using System.Linq;
+using System.Configuration;
+
 
 namespace SnitzProvider
 {
     public class SnitzRoleProvider : RoleProvider
     {
-        #region Fields
-        private string _application = "Snitz";
-        private Database _database;
-        private NameValueCollection _config;
-        #endregion
+        
+		#region [rgn] Properties (2)
 
-        public override void AddUsersToRoles(string[] usernames, string[] roleNames)
-        {
-            foreach (String user in usernames)
-            {
-                foreach (string role in roleNames)
-                {
-                    int cnt = (int)_database.ExecuteScalar("snitz_UsersInRoles_AddUserToRole", user, role, this.Username);
-                }
-            }
-            return;
-        }
-
-        public override string ApplicationName
+        /// <summary>
+        /// Gets or sets the name of the application to store and retrieve role information for.
+        /// </summary>
+        /// <value></value>
+        /// <returns>The name of the application to store and retrieve role information for.</returns>
+		public override string ApplicationName
         {
             get
             {
@@ -43,7 +39,12 @@ namespace SnitzProvider
                 _application = value;
             }
         }
-        private string Username
+
+        /// <summary>
+        /// Gets the username.
+        /// </summary>
+        /// <value>The username.</value>
+		private string Username
         {
             get
             {
@@ -59,85 +60,266 @@ namespace SnitzProvider
             }
         }
 
+        /// <summary>
+        /// Gets or sets the log.
+        /// </summary>
+        /// <value>The log.</value>
+        public TextWriter Log
+        {
+            get
+            {
+                return db.Log;
+            }
+
+            set
+            {
+                db.Log = value;
+            }
+        }
+		
+		#endregion [rgn]
+
+		#region [rgn] Methods (15)
+
+		// [rgn] Public Methods (11)
+
+		/// <summary>
+        /// Adds the specified user names to the specified roles for the configured applicationName.
+        /// </summary>
+        /// <param name="usernames">A string array of user names to be added to the specified roles.</param>
+        /// <param name="roleNames">A string array of the role names to add the specified user names to.</param>
+        public override void AddUsersToRoles(string[] usernames, string[] roleNames)
+        {
+            foreach (String user in usernames)
+            {
+                int memberID = GetMemberID(user);
+                if (memberID != 0)
+                {
+                    foreach (string role in roleNames)
+                    {
+                        int roleID = GetRoleID(role);
+                        if (roleID != 0)
+                        {
+                            FORUM_USERSINROLES ur = new FORUM_USERSINROLES
+                                                    {
+                                                        ROLEID = roleID,
+                                                        MEMBER_ID = memberID,
+//                                                        ModTime = DateTime.Now,
+                                                        ModUser = this.Username
+                                                    };
+                            db.FORUM_USERSINROLES.Add(ur);
+                        }
+                    }
+                }
+            }
+            db.SubmitChanges();
+            return;
+        }
+		
+		/// <summary>
+        /// Adds a new role to the data source for the configured applicationName.
+        /// </summary>
+        /// <param name="roleName">The name of the role to create.</param>
         public override void CreateRole(string roleName)
         {
-            if (roleName == null || roleName == "")
+            if (string.IsNullOrEmpty(roleName))
                 throw new ProviderException("Role name cannot be empty or null.");
             if (roleName.IndexOf(',') > 0)
                 throw new ArgumentException("Role names cannot contain commas.");
-            if (RoleExists(roleName))
-                throw new ProviderException("Role name already exists.");
             if (roleName.Length > 255)
                 throw new ProviderException("Role name cannot exceed 255 characters.");
+            if (RoleExists(roleName))
+                throw new ProviderException("Role name already exists.");
 
-            int cnt = (int)_database.ExecuteScalar("snitz_Roles_CreateRole", roleName, this.Username);
-            if (cnt != 0)
-                throw new ProviderException("Error Occurred while creating role.");
+            FORUM_ROLES role = new FORUM_ROLES
+                               {
+                                   Name = roleName,
+//                                   ModTime = DateTime.Now,
+                                   ModUser = this.Username
+                               };
+            db.FORUM_ROLES.Add(role);
+            db.SubmitChanges();
 
+            role.Description = "New Role for testing";
+            db.SubmitChanges();
+
+            //int cnt = (int)_database.ExecuteScalar("snitz_Roles_CreateRole", roleName, this.Username);
+            //if (cnt != 0)
+            //    throw new ProviderException("Error Occurred while creating role.");
         }
-
+		
+		/// <summary>
+        /// Removes a role from the data source for the configured applicationName.
+        /// </summary>
+        /// <param name="roleName">The name of the role to delete.</param>
+        /// <param name="throwOnPopulatedRole">If true, throw an exception if <paramref name="roleName"/> has one or more members and do not delete <paramref name="roleName"/>.</param>
+        /// <returns>
+        /// true if the role was successfully deleted; otherwise, false.
+        /// </returns>
         public override bool DeleteRole(string roleName, bool throwOnPopulatedRole)
         {
-            if (!RoleExists(roleName))
+            int roleID = GetRoleID(roleName);
+            if (roleID == 0)
             {
                 throw new ProviderException("Role does not exist.");
             }
 
-            if (throwOnPopulatedRole && GetUsersInRole(roleName).Length > 0)
+            if (roleID <= 3)
             {
-                throw new ProviderException("Cannot delete a populated role.");
+                throw new ProviderException("Cannot delete intrinsic roles");
             }
 
-            object oCnt = _database.ExecuteScalar("snitz_Roles_DeleteRole", roleName, throwOnPopulatedRole);
-            Console.WriteLine("oCnt = {0}", oCnt);
-            int cnt = (int) (oCnt ?? 1);
+            if (throwOnPopulatedRole) //  && GetUsersInRole(roleName).Length > 0)
+            {
+                var q = from ur in db.FORUM_USERSINROLES
+                        where ur.ROLEID == roleID
+                        select ur;
+                if (q.Count() > 0)
+                    throw new ProviderException("Cannot delete a populated role.");
+            }
+
+            var q2 = from r in db.FORUM_ROLES
+                    where r.RoleID == roleID
+                    select r;
+
+            int cnt = 0;
+            foreach (FORUM_ROLES r in q2)
+            {
+                db.FORUM_ROLES.Remove(r);
+                ++cnt;
+            }
+            db.SubmitChanges();
             return cnt == 1;
         }
-
+		
+		/// <summary>
+        /// Gets an array of user names in a role where the user name contains the specified user name to match.
+        /// </summary>
+        /// <param name="roleName">The role to search in.</param>
+        /// <param name="usernameToMatch">The user name to search for.</param>
+        /// <returns>
+        /// A string array containing the names of all the users where the user name matches <paramref name="usernameToMatch"/> and the user is a member of the specified role.
+        /// </returns>
         public override string[] FindUsersInRole(string roleName, string usernameToMatch)
         {
-            using (IDataReader vReader = _database.ExecuteReader("snitz_UsersInRoles_FindUsersInRole", roleName, usernameToMatch))
+            int RoleID = GetRoleID(roleName);
+
+            IQueryable<string> query = null;
+            if (RoleID > 0)
             {
-                return Reader2Array(vReader);
+                if (RoleID > 3)
+                {
+                    query = from u in db.FORUM_MEMBERs
+                            join ur in db.FORUM_USERSINROLES
+                            on u.MEMBER_ID equals ur.MEMBER_ID
+                            where ur.ROLEID == RoleID
+                            && u.M_NAME.ToLower().Contains(usernameToMatch.ToLower())
+                            orderby u.M_NAME
+                            select u.M_NAME;
+
+                    /*        SELECT u.M_NAME as UserName
+                            FROM   FORUM_MEMBERS u 
+                                inner join FORUM_USERSINROLES ur on u.MEMBER_ID = ur.MEMBER_ID
+                            WHERE  ur.RoleID = @RoleId
+                            AND    LOWER(M_NAME) LIKE LOWER(@UserNameToMatch)
+                            ORDER BY u.M_NAME
+                    */
+                }
+                else
+                {
+                    query = from m in db.FORUM_MEMBERs
+                            where RoleID <= m.M_LEVEL && m.M_NAME.ToLower().Contains(usernameToMatch)
+                            orderby m.M_NAME
+                            select m.M_NAME;
+                }
             }
+
+            string[] usersArray = query.ToArray(); //  Query2Array(query);
+            return usersArray;
+
         }
-
-        private string[] Reader2Array(IDataReader pReader)
-        {
-            StringCollection vCollection = new StringCollection();
-
-            while (pReader.Read())
-            {
-                vCollection.Add(pReader[0] as string);
-            }
-            string[] names = new string[vCollection.Count];
-            vCollection.CopyTo(names, 0);
-            return names;
-        }
-
+		
+		/// <summary>
+        /// Gets a list of all the roles for the configured applicationName.
+        /// </summary>
+        /// <returns>
+        /// A string array containing the names of all the roles stored in the data source for the configured applicationName.
+        /// </returns>
         public override string[] GetAllRoles()
         {
-            using (IDataReader vReader = _database.ExecuteReader("snitz_Roles_GetAllRoles"))
-            {
-                return Reader2Array(vReader);
-            }
-        }
 
+            var query = from r in db.FORUM_ROLES
+                        orderby r.Name
+                        select r.Name;
+
+            return query.ToArray(); //  Query2Array(query);
+
+            // SELECT Name from FORUM_ROLES ORDER BY Name
+            // _database.ExecuteReader("snitz_Roles_GetAllRoles"))
+        }
+		
+		/// <summary>
+        /// Gets a list of the roles that a specified user is in for the configured applicationName.
+        /// </summary>
+        /// <param name="username">The user to return a list of roles for.</param>
+        /// <returns>
+        /// A string array containing the names of all the roles that the specified user is in for the configured applicationName.
+        /// </returns>
         public override string[] GetRolesForUser(string username)
         {
-            using (IDataReader vReader = _database.ExecuteReader("snitz_UsersInRoles_FindUsersInRole", username))
-            {
-                return Reader2Array(vReader);
-            }
+            var query = (from u in db.FORUM_MEMBERs
+                         join ur in db.FORUM_USERSINROLES on u.MEMBER_ID equals ur.MEMBER_ID
+                         join r in db.FORUM_ROLES on ur.ROLEID equals r.RoleID
+                         where u.M_NAME.ToLower() == username.ToLower()
+                         orderby r.Name
+                         select r.Name).Concat(
+                        from u in db.FORUM_MEMBERs
+                        from r in db.FORUM_ROLES
+                        where r.RoleID  <= u.M_LEVEL && u.M_NAME.ToLower() == username.ToLower()
+                        orderby r.Name
+                        select r.Name);
+            return query.ToArray();     // Query2Array(query);
         }
-
+		
+		/// <summary>
+        /// Gets a list of users in the specified role for the configured applicationName.
+        /// </summary>
+        /// <param name="roleName">The name of the role to get the list of users for.</param>
+        /// <returns>
+        /// A string array containing the names of all the users who are members of the specified role for the configured applicationName.
+        /// </returns>
         public override string[] GetUsersInRole(string roleName)
         {
-            using (IDataReader vReader = _database.ExecuteReader("snitz_UsersInRoles_GetUsersInRoles", roleName))
+            int roleId = GetRoleID(roleName); 
+            IQueryable<string> query = null;
+            if (roleId > 0)
             {
-                return Reader2Array(vReader);
+                if (roleId > 3)
+                {
+                    query = from u in db.FORUM_MEMBERs
+                            join ur in db.FORUM_USERSINROLES on u.MEMBER_ID equals ur.MEMBER_ID
+                            where ur.ROLEID == roleId
+                            orderby u.M_NAME
+                            select u.M_NAME;
+                }
+                else
+                {
+                    query = from u in db.FORUM_MEMBERs
+                            where u.M_LEVEL >= roleId
+                            orderby u.M_NAME
+                            select u.M_NAME;
+                }
             }
+
+            return query.ToArray();     // Query2Array(query);     
+
         }
+		
+		/// <summary>
+        /// Initializes the provider.
+        /// </summary>
+        /// <param name="name">The friendly name of the provider.</param>
+        /// <param name="config">A collection of the name/value pairs representing the provider-specific attributes specified in the configuration for this provider.</param>
         public override void Initialize(string name, NameValueCollection config)
         {
             if (config == null)
@@ -158,12 +340,95 @@ namespace SnitzProvider
             {
                 throw new ProviderException("The attribute 'connectionStringName' is missing or empty.");
             }
-            _database = DatabaseFactory.CreateDatabase(databaseName);
+
+            if (db == null)
+            {
+                ConnectionStringSettings csSettings = ConfigurationManager.ConnectionStrings[databaseName];
+                db = new SnitzMemberDataContext(csSettings.ConnectionString);
+            }
+
             _config = config;
 
         }
+		
+		/// <summary>
+        /// Gets a value indicating whether the specified user is in the specified role for the configured applicationName.
+        /// </summary>
+        /// <param name="username">The user name to search for.</param>
+        /// <param name="roleName">The role to search in.</param>
+        /// <returns>
+        /// true if the specified user is in the specified role for the configured applicationName; otherwise, false.
+        /// </returns>
+        public override bool IsUserInRole(string username, string roleName)
+        {
+            int mid = GetMemberID(username);
+            if (mid > 0)
+            {
+                int rid = GetRoleID(roleName);
+                if (rid > 0)
+                {
+                    if (rid > 3)
+                    {
+                        var q = from ur in db.FORUM_USERSINROLES
+                                where ur.MEMBER_ID == mid && ur.ROLEID == rid
+                                select ur.ID;
+                        return q.Count() == 1;
+                    }
+                    else
+                    {
+                        var q = from u in db.FORUM_MEMBERs
+                                where u.M_LEVEL >= rid && u.MEMBER_ID == mid
+                                select u.MEMBER_ID;
+                        return q.Count() == 1;
+                    }
+                }
+            }
+            return false;
+        }
+		
+		/// <summary>
+        /// Removes the specified user names from the specified roles for the configured applicationName.
+        /// </summary>
+        /// <param name="usernames">A string array of user names to be removed from the specified roles.</param>
+        /// <param name="roleNames">A string array of role names to remove the specified user names from.</param>
+        public override void RemoveUsersFromRoles(string[] usernames, string[] roleNames)
+        {
+            foreach (string user in usernames)
+            {
+                int memberID = GetMemberID(user);
+                foreach (string role in roleNames)
+                {
+                    int roleID = GetRoleID(role);
+                    var q = from ur in db.FORUM_USERSINROLES
+                            where ur.MEMBER_ID == memberID
+                            && ur.ROLEID == roleID
+                            select ur;
+                    foreach (FORUM_USERSINROLES ur in q)
+                    {
+                        db.FORUM_USERSINROLES.Remove(ur);
+                    }
+                    db.SubmitChanges();
+                }
+            }
+            return;
+        }
+		
+		/// <summary>
+        /// Gets a value indicating whether the specified role name already exists in the role data source for the configured applicationName.
+        /// </summary>
+        /// <param name="roleName">The name of the role to search for in the data source.</param>
+        /// <returns>
+        /// true if the role name already exists in the data source for the configured applicationName; otherwise, false.
+        /// </returns>
+        public override bool RoleExists(string roleName)
+        {
+            int roleID = GetRoleID(roleName);
+            return roleID != 0;
+        }
+		
+		// [rgn] Private Methods (4)
 
-        /// <summary>
+		/// <summary>
         /// Ensures the string is in the collection.
         /// </summary>
         /// <param name="config">The config.</param>
@@ -178,31 +443,46 @@ namespace SnitzProvider
                 config.Add(tag, defaultValue);
             }
         }
-
-
-
-        public override bool IsUserInRole(string username, string roleName)
+		
+		private int GetMemberID(string memberName)
         {
-            int RC = (int) _database.ExecuteScalar("snitz_UsersInRoles_IsUserInRole", username, roleName);
-            return RC == 1;
+            var q = from u in db.FORUM_MEMBERs
+                    where u.M_NAME.ToLower() == memberName.ToLower()
+                    select u.MEMBER_ID;
+            
+            return q.FirstOrDefault();
         }
-
-        public override void RemoveUsersFromRoles(string[] usernames, string[] roleNames)
+		
+		private int GetRoleID(string roleName)
         {
-            foreach (string user in usernames)
+            var q = from r in db.FORUM_ROLES
+                    where r.Name.ToLower() == roleName.ToLower()
+                    select r.RoleID;
+            return q.FirstOrDefault();
+        }
+		
+		private T[] Query2Array<T>(IQueryable<T> query)
+        {
+            List<T> items = new List<T>();
+            if (query != null)
             {
-                foreach (string role in roleNames)
+                foreach (T item in query)
                 {
-                    int cnt = (int)_database.ExecuteScalar("snitz_UsersInRoles_RemoveUserFromRole", user, role);
+                    items.Add(item);
                 }
             }
-            return;
+            T[] itemsArray = new T[items.Count];
+            items.CopyTo(itemsArray, 0);
+            return itemsArray;
         }
+		
+		#endregion [rgn]
 
-        public override bool RoleExists(string roleName)
-        {
-            int RC = (int) _database.ExecuteScalar("snitz_Roles_RoleExists", roleName);
-            return RC == 1;
-        }
+        #region Fields
+        private string _application = "Snitz";
+        private NameValueCollection _config;
+        private SnitzMemberDataContext db;
+        #endregion
+
     }
 }

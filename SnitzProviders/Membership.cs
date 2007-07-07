@@ -5,6 +5,7 @@ using System.Data.Common;
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Text;
+using System.IO;
 using System.Globalization;
 using System.Configuration;
 using System.Configuration.Provider;
@@ -16,16 +17,35 @@ using System.Web.Management;
 using System.Web;
 using Microsoft.Practices.EnterpriseLibrary.Common;
 using Microsoft.Practices.EnterpriseLibrary.Data;
+using System.Data.Linq;
+using System.Linq.Expressions;
+using System.Linq;
+
 #endregion
 
 namespace SnitzProvider
 {
     public class SnitzMembershipProvider : MembershipProvider
     {
+        #region inner class miniUser
+        /// <summary>
+        /// Simple class used to pass around User data internally.
+        /// </summary>
+        internal class miniUser
+        {
+            public string Name { get; set; }
+            public int MemberId {get; set;}
+            public string Email {get; set;}
+            public string CreateDate {get; set;}
+            public string LastLoginDate {get; set;}
+        }
+        #endregion
+
         #region Fields
         private     string              _application = "Snitz";
         private     Database            _database;
         private     NameValueCollection _config;
+        private     SnitzMemberDataContext _db;
         #endregion
 
         #region Public (Overridden) Properties
@@ -112,6 +132,22 @@ namespace SnitzProvider
                 return Convert.ToBoolean(_config["RequiresUniqueEmail"]);
             }
         }
+        /// <summary>
+        /// Gets or sets the log.
+        /// </summary>
+        /// <value>The log.</value>
+        public TextWriter Log
+        {
+            get
+            {
+                return _db.Log;
+            }
+
+            set
+            {
+                _db.Log = value;
+            }
+        }
 #endregion
 
         #region Public (Overridden) Methods
@@ -128,13 +164,24 @@ namespace SnitzProvider
         /// </returns>
         public override bool ChangePassword(string username, string oldPassword, string newPassword)
         {
-            DbCommand cmd = _database.GetStoredProcCommand("SnitzChangePassword");
-            _database.AddInParameter(cmd, "pUsername", DbType.String, username);
-            _database.AddInParameter(cmd, "pHashedOldPassword", DbType.String, ToHashString(oldPassword));
-            _database.AddInParameter(cmd, "pHashedNewPassword", DbType.String, ToHashString(newPassword));
-
-            int cnt = (int)_database.ExecuteScalar(cmd);
-            return cnt == 1;
+            ValidatePasswordEventArgs args = OnValidatingPassword(username, newPassword, false);
+            if (args.Cancel)
+            {
+                throw new ProviderException("Cannot change password.  See inner exception", args.FailureInformation);
+            }
+            else
+            {
+                var q = from u in _db.FORUM_MEMBERs
+                        where u.M_NAME == username && u.M_PASSWORD == ToHashString(oldPassword)
+                        select u;
+                FORUM_MEMBER user = q.FirstOrDefault();
+                if (user != null)
+                {
+                    user.M_PASSWORD = ToHashString(newPassword);
+                    _db.SubmitChanges();
+                }
+                return user != null;
+            }
         }
 
         /// <summary>
@@ -147,11 +194,23 @@ namespace SnitzProvider
         /// </returns>
         public override bool DeleteUser(string username, bool deleteAllRelatedData)
         {
-            DbCommand cmd = _database.GetStoredProcCommand("SnitzDeleteUser");
-            _database.AddInParameter(cmd, "pUsername", DbType.String, username);
+                //DELETE From FORUM_MEMBERS where M_NAME = @pUsername
 
-            int cnt = (int)_database.ExecuteScalar(cmd);
-            return cnt> 0;
+            var q = from u in _db.FORUM_MEMBERs where u.M_NAME == username select u;
+            FORUM_MEMBER m = q.FirstOrDefault();
+            if (m == null)
+                return false;
+            else
+            {
+                _db.FORUM_MEMBERs.Remove(m);
+                _db.SubmitChanges();
+                return true;
+            }
+            //DbCommand cmd = _database.GetStoredProcCommand("SnitzDeleteUser");
+            //_database.AddInParameter(cmd, "pUsername", DbType.String, username);
+
+            //int cnt = (int)_database.ExecuteScalar(cmd);
+            //return cnt> 0;
         }
 
         /// <summary>
@@ -166,47 +225,29 @@ namespace SnitzProvider
         /// </returns>
         public override MembershipUserCollection FindUsersByEmail(string emailToMatch, int pageIndex, int pageSize, out int totalRecords)
         {
-            DbCommand dbCommand = _database.GetStoredProcCommand("SnitzFindUsersByEmail");
+            var q = (from m in _db.FORUM_MEMBERs
+                     where m.M_STATUS == 1 && m.M_EMAIL.ToLower().Contains(emailToMatch.ToLower())
+                     orderby m.M_NAME
+                     select new miniUser
+                            {
+                                Name = m.M_NAME,
+                                MemberId = m.MEMBER_ID,
+                                Email = m.M_EMAIL,
+                                CreateDate = m.M_DATE,
+                                LastLoginDate = m.M_LASTHEREDATE
+                            }).Skip(pageIndex * pageSize).Take(pageSize);
 
-            _database.AddInParameter(dbCommand, "emailToMatch", DbType.String, emailToMatch);
-            _database.AddInParameter(dbCommand, "pageIndex", DbType.Int32, pageIndex);
-            _database.AddInParameter(dbCommand, "pageSize", DbType.Int32, pageSize);
-            _database.AddParameter(dbCommand, "ReturnValue", DbType.Int32, ParameterDirection.ReturnValue, null, DataRowVersion.Current, 0);
-            totalRecords = 0;
-            using (IDataReader vReader = _database.ExecuteReader(dbCommand))
+            MembershipUserCollection vCollection = new MembershipUserCollection();
+            foreach (miniUser user in q)
             {
-                MembershipUserCollection vCollection = new MembershipUserCollection();
-
-                while (vReader.Read())
-                {
-                    vCollection.Add(ReadUser(vReader));
-                }
-
-                object val = _database.GetParameterValue(dbCommand, "ReturnValue");
-                if ((val != null) && (val is int))
-                {
-                    totalRecords = (int)val;
-                }
-                return vCollection;
+                vCollection.Add(BuildMemberObject(user));
             }
-        }
-        /// <summary>
-        /// Reads the user.
-        /// </summary>
-        /// <param name="pReader">The reader.</param>
-        /// <returns></returns>
-        public MembershipUser ReadUser(IDataReader pReader)
-        {
-            const string cDateFormat = "yyyyMMddHHmmss";
 
-            string vUserName = pReader["Name"] as string;
-            int vUserId = (int)pReader["MEMBER_ID"];
-            string vEmail = pReader["Email"] as string;
-            string vstrCreateDate = pReader["CreateDate"] as string;
-            string vstrLastLoginDate = pReader["LastLoginDate"] as string;
-            DateTime vCreateDate = DateTime.ParseExact(vstrCreateDate, cDateFormat, CultureInfo.CurrentCulture);
-            DateTime vLastLoginDate = DateTime.ParseExact(vstrLastLoginDate, cDateFormat, CultureInfo.CurrentCulture);
-            return new MembershipUser("SnitzMembershipProvider", vUserName, (object)vUserId, vEmail, null, null, true, false, vCreateDate, vLastLoginDate, vLastLoginDate, DateTime.Now, DateTime.Now);
+            var q2 = from m in _db.FORUM_MEMBERs
+                     where m.M_STATUS == 1 && m.M_EMAIL.ToLower().Contains(emailToMatch.ToLower())
+                     select m;
+            totalRecords = q2.Count();
+            return vCollection;
         }
 
         /// <summary>
@@ -221,29 +262,30 @@ namespace SnitzProvider
         /// </returns>
         public override MembershipUserCollection FindUsersByName(string usernameToMatch, int pageIndex, int pageSize, out int totalRecords)
         {
-            using (DbCommand dbCommand = _database.GetStoredProcCommand("[SnitzFindUsersByName]"))
-            {
-                _database.AddInParameter(dbCommand, "usernameToMatch", DbType.String, usernameToMatch);
-                _database.AddInParameter(dbCommand, "pageIndex", DbType.Int32, pageIndex);
-                _database.AddInParameter(dbCommand, "pageSize", DbType.Int32, pageSize);
-                _database.AddParameter(dbCommand, "ReturnValue", DbType.Int32, ParameterDirection.ReturnValue, null, DataRowVersion.Default, 0);
-                totalRecords = 0;
-                using (IDataReader vReader = _database.ExecuteReader(dbCommand))
-                {
-                    MembershipUserCollection vCollection = new MembershipUserCollection();
 
-                    while (vReader.Read())
-                    {
-                        vCollection.Add(ReadUser(vReader));
-                    }
-                    object val = _database.GetParameterValue(dbCommand, "ReturnValue");
-                    if ((val != null) && (val is int))
-                    {
-                        totalRecords = (int)val;
-                    }
-                    return vCollection;
-                }
+            var q = (from m in _db.FORUM_MEMBERs
+                     where m.M_STATUS == 1 && m.M_NAME.ToLower().Contains(usernameToMatch.ToLower())
+                     orderby m.M_NAME
+                     select new miniUser
+                            {
+                                Name = m.M_NAME,
+                                MemberId = m.MEMBER_ID,
+                                Email = m.M_EMAIL,
+                                CreateDate = m.M_DATE,
+                                LastLoginDate = m.M_LASTHEREDATE
+                            }).Skip(pageIndex * pageSize).Take(pageSize);
+
+            MembershipUserCollection vCollection = new MembershipUserCollection();
+            foreach (miniUser user in q)
+            {
+                vCollection.Add(BuildMemberObject(user));
             }
+
+            var q2 = from m in _db.FORUM_MEMBERs
+                     where m.M_STATUS == 1 && m.M_NAME.ToLower().Contains(usernameToMatch.ToLower())
+                     select m;
+            totalRecords = q2.Count();
+            return vCollection;
         }
         /// <summary>
         /// Gets a collection of all the users in the data source in pages of data.
@@ -256,28 +298,29 @@ namespace SnitzProvider
         /// </returns>
         public override MembershipUserCollection GetAllUsers(int pageIndex, int pageSize, out int totalRecords)
         {
-            using (DbCommand dbCommand = _database.GetStoredProcCommand("[SnitzGetAllUsers]"))
-            {
-                _database.AddInParameter(dbCommand, "pageIndex", DbType.Int32, pageIndex);
-                _database.AddInParameter(dbCommand, "pageSize", DbType.Int32, pageSize);
-                _database.AddParameter(dbCommand, "ReturnValue", DbType.Int32, ParameterDirection.ReturnValue, null, DataRowVersion.Default, 0);
-                totalRecords = 0;
-                using (IDataReader vReader = _database.ExecuteReader(dbCommand))
-                {
-                    MembershipUserCollection vCollection = new MembershipUserCollection();
+            var q = (from m in _db.FORUM_MEMBERs
+                    where m.M_STATUS == 1
+                    orderby m.M_NAME
+                    select new miniUser
+                           {
+                               Name = m.M_NAME,
+                               MemberId = m.MEMBER_ID,
+                               Email = m.M_EMAIL,
+                               CreateDate = m.M_DATE,
+                               LastLoginDate = m.M_LASTHEREDATE
+                           }).Skip(pageIndex * pageSize).Take(pageSize);
 
-                    while (vReader.Read())
-                    {
-                        vCollection.Add(ReadUser(vReader));
-                    }
-                    object val = _database.GetParameterValue(dbCommand, "ReturnValue");
-                    if ((val != null) && (val is int))
-                    {
-                        totalRecords = (int)val;
-                    }
-                    return vCollection;
-                }
+            MembershipUserCollection vCollection = new MembershipUserCollection();
+            foreach(miniUser user in q)
+            {
+                vCollection.Add(BuildMemberObject(user));
             }
+
+            var q2 = from m in _db.FORUM_MEMBERs
+                     where m.M_STATUS == 1
+                     select m;
+            totalRecords = q2.Count();
+            return vCollection;
         }
 
         /// <summary>
@@ -290,8 +333,10 @@ namespace SnitzProvider
         {
             string dtWindow = ToDateString(DateTime.Now.AddMinutes(-Membership.UserIsOnlineTimeWindow));
 
-            int cnt = (int)_database.ExecuteScalar("SnitzGetNumberOfUsersOnline", dtWindow);
-            return cnt;
+            var q = from u in _db.FORUM_MEMBERs
+                    where u.M_LASTHEREDATE.CompareTo(dtWindow)  > 0
+                    select u;
+            return q.Count();
         }
 
         /// <summary>
@@ -304,24 +349,20 @@ namespace SnitzProvider
         /// </returns>
         public override MembershipUser GetUser(string username, bool userIsOnline)
         {
+            var q = from m in _db.FORUM_MEMBERs
+                    where m.M_NAME.ToLower() == username.ToLower()
+                    select m;
 
-            using (DbCommand cmd = _database.GetStoredProcCommand("SnitzGetUserByName"))
+            FORUM_MEMBER user = q.FirstOrDefault();
+            if (userIsOnline && user != null)
             {
-                _database.AddInParameter(cmd, "pName", DbType.String, username);
-                _database.AddInParameter(cmd, "pUserIsOnline", DbType.Boolean, userIsOnline);
-
-                using (IDataReader vReader = _database.ExecuteReader(cmd))
-                {
-                    if (vReader.Read())
-                    {
-                        return ReadUser(vReader);
-                    }
-                    else
-                    {
-                        return null;
-                    }
-                }
+                user.M_LASTHEREDATE = ToDateString(DateTime.Now);
+                Console.WriteLine("GetQueryText=[{0}]", _db.GetQueryText(q));
+                string changeText = _db.GetChangeText();
+                Console.WriteLine("changeText=[{0}]",changeText);
+                _db.SubmitChanges();
             }
+            return BuildMemberObject(user);
         }
 
         /// <summary>
@@ -334,23 +375,17 @@ namespace SnitzProvider
         /// </returns>
         public override MembershipUser GetUser(object providerUserKey, bool userIsOnline)
         {
-            using (DbCommand cmd = _database.GetStoredProcCommand("SnitzGetUserById"))
-            {
-                _database.AddInParameter(cmd, "pId", DbType.Int32, (int)providerUserKey);
-                _database.AddInParameter(cmd, "pUserIsOnline", DbType.Boolean, userIsOnline);
+            var q = from m in _db.FORUM_MEMBERs
+                    where m.MEMBER_ID == (int)providerUserKey && m.M_STATUS == 1
+                    select m;
 
-                using (IDataReader vReader = _database.ExecuteReader(cmd))
-                {
-                    if (vReader.Read())
-                    {
-                        return ReadUser(vReader);
-                    }
-                    else
-                    {
-                        return null;
-                    }
-                }
+            FORUM_MEMBER user = q.FirstOrDefault();
+            if (userIsOnline && user != null)
+            {
+                user.M_LASTHEREDATE = ToDateString(DateTime.Now);
+                _db.SubmitChanges();
             }
+            return BuildMemberObject(user);
         }
 
         /// <summary>
@@ -362,10 +397,10 @@ namespace SnitzProvider
         /// </returns>
         public override string GetUserNameByEmail(string email)
         {
-            DbCommand cmd = _database.GetStoredProcCommand("SnitzGetUserNameByEmail");
-            _database.AddInParameter(cmd, "pEmail", DbType.String, email);
-
-            return (string)_database.ExecuteScalar(cmd);
+            var q = from u in _db.FORUM_MEMBERs
+                    where u.M_EMAIL.ToLower() == email.ToLower()
+                    select u.M_NAME;
+            return q.FirstOrDefault();
         }
 
         /// <summary>
@@ -391,12 +426,19 @@ namespace SnitzProvider
 
             base.Initialize(name, config);
 
+
             string databaseName = config["connectionStringName"];
             if (String.IsNullOrEmpty(databaseName))
             {
                 throw new ProviderException("The attribute 'connectionStringName' is missing or empty.");
             }
+            if (_db == null)
+            {
+                ConnectionStringSettings csSettings = ConfigurationManager.ConnectionStrings[databaseName];
+                _db = new SnitzMemberDataContext(csSettings.ConnectionString);
+            }
             _database = DatabaseFactory.CreateDatabase(databaseName);
+
             _config = config;
 
             // Set Default parameters
@@ -418,9 +460,9 @@ namespace SnitzProvider
         /// </returns>
         public override bool UnlockUser(string userName)
         {
-            DbCommand cmd = _database.GetStoredProcCommand("SnitzUnlockUser");
-            _database.AddInParameter(cmd, "pUsername", DbType.String, userName);
-            _database.ExecuteNonQuery(cmd);
+            FORUM_MEMBER user = _db.FORUM_MEMBERs.First(m => m.M_NAME.ToLower() == userName.ToLower());
+            user.M_STATUS = 1 ;
+            _db.SubmitChanges();
             return true;
          }
 
@@ -434,38 +476,39 @@ namespace SnitzProvider
          /// </returns>
         public override bool ValidateUser(string username, string password)
         {
-            DbCommand cmd = _database.GetStoredProcCommand("SnitzValidateUser");
-            _database.AddInParameter(cmd, "pUsername", DbType.String, username);
-            _database.AddInParameter(cmd, "pHashedPassword", DbType.String, ToHashString(password));
-
-            int cnt = (int)_database.ExecuteScalar(cmd);
-            return cnt == 1;
+            var q = from u in _db.FORUM_MEMBERs
+                    where u.M_STATUS == 1
+                    && u.M_NAME == username
+                    && u.M_PASSWORD == ToHashString(password)
+                    select u;
+            return q.Count() == 1;
         }
         #endregion
 
         #region Stubbed Methods
         public override void UpdateUser(MembershipUser user)
         {
-            throw new Exception("The method or operation is not implemented.");
+            throw new NotImplementedException("The method or operation is not implemented.");
         }
 
         public override string ResetPassword(string username, string answer)
         {
-            throw new Exception("The method or operation is not implemented.");
+            throw new NotImplementedException("The method or operation is not implemented.");
         }
 
         public override string GetPassword(string username, string answer)
         {
-            throw new Exception("The method or operation is not implemented.");
+            throw new NotImplementedException("The method or operation is not implemented.");
         }
         public override bool ChangePasswordQuestionAndAnswer(string username, string password, string newPasswordQuestion, string newPasswordAnswer)
         {
-            throw new Exception("The method or operation is not implemented.");
+            throw new NotImplementedException("The method or operation is not implemented.");
         }
 
         public override MembershipUser CreateUser(string username, string password, string email, string passwordQuestion, string passwordAnswer, bool isApproved, object providerUserKey, out MembershipCreateStatus status)
         {
-            throw new Exception("The method or operation is not implemented.");
+            //            ValidatePasswordEventArgs args = OnValidatingPassword(username, password, false);
+            throw new NotImplementedException("The method or operation is not implemented.");
         }
         #endregion
         #endregion
@@ -474,9 +517,9 @@ namespace SnitzProvider
         /// <summary>
         /// Ensures the int is in the collection.
         /// </summary>
-        /// <param name="config">The config.</param>
-        /// <param name="tag">The tag.</param>
-        /// <param name="defaultValue">The default value.</param>
+        /// <param name="config">The collection of configuration options.</param>
+        /// <param name="tag">The tag that must be in the collection.</param>
+        /// <param name="defaultValue">The default value used if the tag is missing.</param>
         private void EnsureInt(NameValueCollection config, string tag, int defaultValue)
         {
             string val = config[tag];
@@ -537,10 +580,11 @@ namespace SnitzProvider
 
 
         /// <summary>
-        /// Convert to the hash string.
+        /// Hashes a password using thr SHA256 algotrithm, and then convert it to
+        /// a hex string.
         /// </summary>
-        /// <param name="Pwd">The PWD.</param>
-        /// <returns></returns>
+        /// <param name="Pwd">The password.</param>
+        /// <returns>string of hex characters.</returns>
         private static string ToHashString(string Pwd)
         {
             if (String.IsNullOrEmpty(Pwd))
@@ -560,14 +604,58 @@ namespace SnitzProvider
         }
 
         /// <summary>
-        /// To the date string.
+        /// Converts a DateTime object into a string in the format used by the Snitz database.
         /// </summary>
-        /// <param name="pDate">The p date.</param>
+        /// <param name="pDate">The date.</param>
         /// <returns></returns>
         private static string ToDateString(DateTime pDate)
         {
             const string cDateFormat = "yyyyMMddHHmmss";
             return pDate.ToString(cDateFormat);
+        }
+
+
+        /// <summary>
+        /// Builds a MembershipUser object from the given data.
+        /// </summary>
+        /// <param name="user">The user.</param>
+        /// <returns></returns>
+        private MembershipUser BuildMemberObject(miniUser user)
+        {
+            const string cDateFormat = "yyyyMMddHHmmss";
+            DateTime vCreateDate = DateTime.ParseExact(user.CreateDate, cDateFormat, CultureInfo.CurrentCulture);
+            DateTime vLastLoginDate = DateTime.ParseExact(user.LastLoginDate, cDateFormat, CultureInfo.CurrentCulture);
+            return new MembershipUser("SnitzMembershipProvider", user.Name, (object)user.MemberId, user.Email,
+                       null, null, true, false, vCreateDate, vLastLoginDate, vLastLoginDate, DateTime.Now, DateTime.Now);
+        }
+
+
+        /// <summary>
+        /// Builds a MembershipUser object from the given data.
+        /// </summary>
+        /// <param name="user">The user.</param>
+        /// <returns></returns>
+        private MembershipUser BuildMemberObject(FORUM_MEMBER user)
+        {
+            const string cDateFormat = "yyyyMMddHHmmss";
+            DateTime vCreateDate = DateTime.ParseExact(user.M_DATE, cDateFormat, CultureInfo.CurrentCulture);
+            DateTime vLastLoginDate = DateTime.ParseExact(user.M_LASTHEREDATE, cDateFormat, CultureInfo.CurrentCulture);
+            return new MembershipUser("SnitzMembershipProvider", user.M_NAME, (object)user.MEMBER_ID, user.M_EMAIL,
+                       null, null, true, false, vCreateDate, vLastLoginDate, vLastLoginDate, DateTime.Now, DateTime.Now);
+        }
+
+        /// <summary>
+        /// Called when a password needs validating.  Helper function to trigger ValidingPassword event.
+        /// </summary>
+        /// <param name="userName">Name of the user.</param>
+        /// <param name="password">The password.</param>
+        /// <param name="isNewUser">if set to <c>true</c> [is new user].</param>
+        /// <returns></returns>
+        private ValidatePasswordEventArgs OnValidatingPassword(string userName, string password, bool isNewUser)
+        {
+            ValidatePasswordEventArgs e = new ValidatePasswordEventArgs(userName, password, isNewUser);
+            base.OnValidatingPassword(e);
+            return e;
         }
         #endregion
     }

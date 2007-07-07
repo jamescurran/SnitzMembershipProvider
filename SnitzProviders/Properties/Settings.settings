@@ -10,5 +10,21 @@
 &lt;/SerializableConnectionString&gt;</DesignTimeValue>
       <Value Profile="(Default)">Data Source=.\SQLEXPRESS;AttachDbFilename="C:\Documents and Settings\JamesCurran\My Documents\Visual Studio\Projects\SnitzMemberRole\Database\NJT_Memebers.mdf";Integrated Security=True;Connect Timeout=30;User Instance=True</Value>
     </Setting>
+    <Setting Name="C__DOCUMENTS_AND_SETTINGS_JAMESCURRAN_MY_DOCUMENTS_VISUAL_STUDIO_PROJECTS_SNITZMEMBERROLE_DATABASE_NJT_MEMEBERS_MDFConne" Type="(Connection string)" Scope="Application">
+      <DesignTimeValue Profile="(Default)">&lt;?xml version="1.0" encoding="utf-16"?&gt;
+&lt;SerializableConnectionString xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema"&gt;
+  &lt;ConnectionString&gt;Data Source=NANAK\SQLEXPRESS;Initial Catalog="C:\DOCUMENTS AND SETTINGS\JAMESCURRAN\MY DOCUMENTS\VISUAL STUDIO\PROJECTS\SNITZMEMBERROLE\DATABASE\NJT_MEMEBERS.MDF";Integrated Security=True&lt;/ConnectionString&gt;
+  &lt;ProviderName&gt;System.Data.SqlClient&lt;/ProviderName&gt;
+&lt;/SerializableConnectionString&gt;</DesignTimeValue>
+      <Value Profile="(Default)">Data Source=NANAK\SQLEXPRESS;Initial Catalog="C:\DOCUMENTS AND SETTINGS\JAMESCURRAN\MY DOCUMENTS\VISUAL STUDIO\PROJECTS\SNITZMEMBERROLE\DATABASE\NJT_MEMEBERS.MDF";Integrated Security=True</Value>
+    </Setting>
+    <Setting Name="SnitzProviderTestConnectionString" Type="(Connection string)" Scope="Application">
+      <DesignTimeValue Profile="(Default)">&lt;?xml version="1.0" encoding="utf-16"?&gt;
+&lt;SerializableConnectionString xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema"&gt;
+  &lt;ConnectionString&gt;Data Source=NANAK\SQLEXPRESS;Initial Catalog=SnitzProviderTest;Integrated Security=True&lt;/ConnectionString&gt;
+  &lt;ProviderName&gt;System.Data.SqlClient&lt;/ProviderName&gt;
+&lt;/SerializableConnectionString&gt;</DesignTimeValue>
+      <Value Profile="(Default)">Data Source=NANAK\SQLEXPRESS;Initial Catalog=SnitzProviderTest;Integrated Security=True</Value>
+    </Setting>
   </Settings>
 </SettingsFile>
