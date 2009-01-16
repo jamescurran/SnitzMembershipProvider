@@ -1,24 +1,13 @@
 #region Assembly References
 using System;
-using System.Data;
-using System.Data.Common;
-using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Text;
 using System.IO;
 using System.Globalization;
 using System.Configuration;
 using System.Configuration.Provider;
-using System.Security.Permissions;
 using System.Security.Cryptography;
 using System.Web.Security;
-using System.Web.Hosting;
-using System.Web.Management;
-using System.Web;
-using Microsoft.Practices.EnterpriseLibrary.Common;
-using Microsoft.Practices.EnterpriseLibrary.Data;
-using System.Data.Linq;
-using System.Linq.Expressions;
 using System.Linq;
 
 #endregion
@@ -43,7 +32,6 @@ namespace SnitzProvider
 
         #region Fields
         private     string              _application = "Snitz";
-        private     Database            _database;
         private     NameValueCollection _config;
         private     SnitzMemberDataContext _db;
         #endregion
@@ -202,7 +190,7 @@ namespace SnitzProvider
                 return false;
             else
             {
-                _db.FORUM_MEMBERs.Remove(m);
+                _db.FORUM_MEMBERs.DeleteOnSubmit(m);
                 _db.SubmitChanges();
                 return true;
             }
@@ -357,9 +345,6 @@ namespace SnitzProvider
             if (userIsOnline && user != null)
             {
                 user.M_LASTHEREDATE = ToDateString(DateTime.Now);
-                Console.WriteLine("GetQueryText=[{0}]", _db.GetQueryText(q));
-                string changeText = _db.GetChangeText();
-                Console.WriteLine("changeText=[{0}]",changeText);
                 _db.SubmitChanges();
             }
             return BuildMemberObject(user);
@@ -437,7 +422,6 @@ namespace SnitzProvider
                 ConnectionStringSettings csSettings = ConfigurationManager.ConnectionStrings[databaseName];
                 _db = new SnitzMemberDataContext(csSettings.ConnectionString);
             }
-            _database = DatabaseFactory.CreateDatabase(databaseName);
 
             _config = config;
 
@@ -637,10 +621,12 @@ namespace SnitzProvider
         /// <returns></returns>
         private MembershipUser BuildMemberObject(FORUM_MEMBER user)
         {
+			if (user == null)
+				return null;
             const string cDateFormat = "yyyyMMddHHmmss";
             DateTime vCreateDate = DateTime.ParseExact(user.M_DATE, cDateFormat, CultureInfo.CurrentCulture);
             DateTime vLastLoginDate = DateTime.ParseExact(user.M_LASTHEREDATE, cDateFormat, CultureInfo.CurrentCulture);
-            return new MembershipUser("SnitzMembershipProvider", user.M_NAME, (object)user.MEMBER_ID, user.M_EMAIL,
+            return new MembershipUser("SnitzProvider", user.M_NAME, (object)user.MEMBER_ID, user.M_EMAIL,
                        null, null, true, false, vCreateDate, vLastLoginDate, vLastLoginDate, DateTime.Now, DateTime.Now);
         }
 

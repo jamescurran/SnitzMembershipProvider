@@ -1,0 +1,38 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<ordesignerObjectsDiagram dslVersion="1.0.0.0" absoluteBounds="0, 0, 11, 10.75" name="SnitzMember">
+  <DataContextMoniker Name="/SnitzMemberDataContext" />
+  <nestedChildShapes>
+    <classShape Id="4287fba1-41b6-4866-864b-683c3559d5b8" absoluteBounds="5.625, 0.5, 2, 10.0398583984375">
+      <DataClassMoniker Name="/SnitzMemberDataContext/FORUM_MEMBER" />
+      <nestedChildShapes>
+        <elementListCompartment Id="8fa281f9-2530-4853-a5ba-c954add75443" absoluteBounds="5.6400000000000006, 0.96, 1.9700000000000002, 9.4798583984375" name="DataPropertiesCompartment" titleTextColor="Black" itemTextColor="Black" />
+      </nestedChildShapes>
+    </classShape>
+    <classShape Id="ce964c04-6afb-4d14-96f6-ece0840dd76b" absoluteBounds="0.5, 3.5, 2, 1.7708968098958331">
+      <DataClassMoniker Name="/SnitzMemberDataContext/FORUM_ROLE" />
+      <nestedChildShapes>
+        <elementListCompartment Id="de9eba50-b7d9-4d5c-b0d7-098b51680dad" absoluteBounds="0.51500000000000057, 3.96, 1.9700000000000002, 1.2108968098958333" name="DataPropertiesCompartment" titleTextColor="Black" itemTextColor="Black" />
+      </nestedChildShapes>
+    </classShape>
+    <classShape Id="ddea4ef3-1191-4611-9b12-8dd6ad9caf27" absoluteBounds="0.625, 1, 2, 1.7708968098958327">
+      <DataClassMoniker Name="/SnitzMemberDataContext/FORUM_USERSINROLE" />
+      <nestedChildShapes>
+        <elementListCompartment Id="549fe5df-a8ed-4269-9412-e2b11f783e3e" absoluteBounds="0.63999999999999968, 1.46, 1.9700000000000002, 1.2108968098958333" name="DataPropertiesCompartment" titleTextColor="Black" itemTextColor="Black" />
+      </nestedChildShapes>
+    </classShape>
+    <associationConnector edgePoints="[(5.625 : 1.88544840494792); (2.625 : 1.88544840494792)]" fixedFrom="Algorithm" fixedTo="Algorithm">
+      <AssociationMoniker Name="/SnitzMemberDataContext/FORUM_MEMBER/FORUM_MEMBER_FORUM_USERSINROLE" />
+      <nodes>
+        <classShapeMoniker Id="4287fba1-41b6-4866-864b-683c3559d5b8" />
+        <classShapeMoniker Id="ddea4ef3-1191-4611-9b12-8dd6ad9caf27" />
+      </nodes>
+    </associationConnector>
+    <associationConnector edgePoints="[(1.5625 : 3.5); (1.5625 : 2.77089680989583)]" fixedFrom="Algorithm" fixedTo="Algorithm">
+      <AssociationMoniker Name="/SnitzMemberDataContext/FORUM_ROLE/FORUM_ROLE_FORUM_USERSINROLE" />
+      <nodes>
+        <classShapeMoniker Id="ce964c04-6afb-4d14-96f6-ece0840dd76b" />
+        <classShapeMoniker Id="ddea4ef3-1191-4611-9b12-8dd6ad9caf27" />
+      </nodes>
+    </associationConnector>
+  </nestedChildShapes>
+</ordesignerObjectsDiagram>
