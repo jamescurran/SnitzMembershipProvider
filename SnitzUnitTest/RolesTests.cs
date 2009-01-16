@@ -3,7 +3,6 @@ using System.Collections.Specialized;  // for NameValueCollection
 using System.Configuration.Provider;    // for ProviderException
 
 using MbUnit.Framework;
-using MbUnit.Core;
 
 using SnitzProvider;
 

@@ -1,17 +1,10 @@
 using System;
 using System.Collections.Generic;
-using System.Text;
 using System.Web.Security;
 using System.Web;
-using Microsoft.Practices.EnterpriseLibrary.Common;
-using Microsoft.Practices.EnterpriseLibrary.Data;
 using System.Collections.Specialized;
-using System.Data;
 using System.Configuration.Provider;
-using System.Diagnostics;
 using System.IO;
-using System.Data.Linq;
-using System.Linq.Expressions;
 using System.Linq;
 using System.Configuration;
 
@@ -100,14 +93,14 @@ namespace SnitzProvider
                         int roleID = GetRoleID(role);
                         if (roleID != 0)
                         {
-                            FORUM_USERSINROLES ur = new FORUM_USERSINROLES
+                            FORUM_USERSINROLE ur = new FORUM_USERSINROLE
                                                     {
                                                         ROLEID = roleID,
                                                         MEMBER_ID = memberID,
 //                                                        ModTime = DateTime.Now,
                                                         ModUser = this.Username
                                                     };
-                            db.FORUM_USERSINROLES.Add(ur);
+                            db.FORUM_USERSINROLEs.InsertOnSubmit(ur);
                         }
                     }
                 }
@@ -131,13 +124,13 @@ namespace SnitzProvider
             if (RoleExists(roleName))
                 throw new ProviderException("Role name already exists.");
 
-            FORUM_ROLES role = new FORUM_ROLES
+            FORUM_ROLE role = new FORUM_ROLE
                                {
                                    Name = roleName,
 //                                   ModTime = DateTime.Now,
                                    ModUser = this.Username
                                };
-            db.FORUM_ROLES.Add(role);
+            db.FORUM_ROLEs.InsertOnSubmit(role);
             db.SubmitChanges();
 
             role.Description = "New Role for testing";
@@ -171,21 +164,21 @@ namespace SnitzProvider
 
             if (throwOnPopulatedRole) //  && GetUsersInRole(roleName).Length > 0)
             {
-                var q = from ur in db.FORUM_USERSINROLES
+                var q = from ur in db.FORUM_USERSINROLEs
                         where ur.ROLEID == roleID
                         select ur;
                 if (q.Count() > 0)
                     throw new ProviderException("Cannot delete a populated role.");
             }
 
-            var q2 = from r in db.FORUM_ROLES
+            var q2 = from r in db.FORUM_ROLEs
                     where r.RoleID == roleID
                     select r;
 
             int cnt = 0;
-            foreach (FORUM_ROLES r in q2)
+            foreach (FORUM_ROLE r in q2)
             {
-                db.FORUM_ROLES.Remove(r);
+                db.FORUM_ROLEs.DeleteOnSubmit(r);
                 ++cnt;
             }
             db.SubmitChanges();
@@ -210,7 +203,7 @@ namespace SnitzProvider
                 if (RoleID > 3)
                 {
                     query = from u in db.FORUM_MEMBERs
-                            join ur in db.FORUM_USERSINROLES
+                            join ur in db.FORUM_USERSINROLEs
                             on u.MEMBER_ID equals ur.MEMBER_ID
                             where ur.ROLEID == RoleID
                             && u.M_NAME.ToLower().Contains(usernameToMatch.ToLower())
@@ -219,7 +212,7 @@ namespace SnitzProvider
 
                     /*        SELECT u.M_NAME as UserName
                             FROM   FORUM_MEMBERS u 
-                                inner join FORUM_USERSINROLES ur on u.MEMBER_ID = ur.MEMBER_ID
+                                inner join FORUM_USERSINROLE ur on u.MEMBER_ID = ur.MEMBER_ID
                             WHERE  ur.RoleID = @RoleId
                             AND    LOWER(M_NAME) LIKE LOWER(@UserNameToMatch)
                             ORDER BY u.M_NAME
@@ -248,13 +241,13 @@ namespace SnitzProvider
         public override string[] GetAllRoles()
         {
 
-            var query = from r in db.FORUM_ROLES
+            var query = from r in db.FORUM_ROLEs
                         orderby r.Name
                         select r.Name;
 
             return query.ToArray(); //  Query2Array(query);
 
-            // SELECT Name from FORUM_ROLES ORDER BY Name
+            // SELECT Name from FORUM_ROLE ORDER BY Name
             // _database.ExecuteReader("snitz_Roles_GetAllRoles"))
         }
 		
@@ -268,13 +261,13 @@ namespace SnitzProvider
         public override string[] GetRolesForUser(string username)
         {
             var query = (from u in db.FORUM_MEMBERs
-                         join ur in db.FORUM_USERSINROLES on u.MEMBER_ID equals ur.MEMBER_ID
-                         join r in db.FORUM_ROLES on ur.ROLEID equals r.RoleID
+                         join ur in db.FORUM_USERSINROLEs on u.MEMBER_ID equals ur.MEMBER_ID
+                         join r in db.FORUM_ROLEs on ur.ROLEID equals r.RoleID
                          where u.M_NAME.ToLower() == username.ToLower()
                          orderby r.Name
                          select r.Name).Concat(
                         from u in db.FORUM_MEMBERs
-                        from r in db.FORUM_ROLES
+                        from r in db.FORUM_ROLEs
                         where r.RoleID  <= u.M_LEVEL && u.M_NAME.ToLower() == username.ToLower()
                         orderby r.Name
                         select r.Name);
@@ -297,7 +290,7 @@ namespace SnitzProvider
                 if (roleId > 3)
                 {
                     query = from u in db.FORUM_MEMBERs
-                            join ur in db.FORUM_USERSINROLES on u.MEMBER_ID equals ur.MEMBER_ID
+                            join ur in db.FORUM_USERSINROLEs on u.MEMBER_ID equals ur.MEMBER_ID
                             where ur.ROLEID == roleId
                             orderby u.M_NAME
                             select u.M_NAME;
@@ -369,7 +362,7 @@ namespace SnitzProvider
                 {
                     if (rid > 3)
                     {
-                        var q = from ur in db.FORUM_USERSINROLES
+                        var q = from ur in db.FORUM_USERSINROLEs
                                 where ur.MEMBER_ID == mid && ur.ROLEID == rid
                                 select ur.ID;
                         return q.Count() == 1;
@@ -399,13 +392,13 @@ namespace SnitzProvider
                 foreach (string role in roleNames)
                 {
                     int roleID = GetRoleID(role);
-                    var q = from ur in db.FORUM_USERSINROLES
+                    var q = from ur in db.FORUM_USERSINROLEs
                             where ur.MEMBER_ID == memberID
                             && ur.ROLEID == roleID
                             select ur;
-                    foreach (FORUM_USERSINROLES ur in q)
+                    foreach (FORUM_USERSINROLE ur in q)
                     {
-                        db.FORUM_USERSINROLES.Remove(ur);
+                        db.FORUM_USERSINROLEs.DeleteOnSubmit(ur);
                     }
                     db.SubmitChanges();
                 }
@@ -455,7 +448,7 @@ namespace SnitzProvider
 		
 		private int GetRoleID(string roleName)
         {
-            var q = from r in db.FORUM_ROLES
+            var q = from r in db.FORUM_ROLEs
                     where r.Name.ToLower() == roleName.ToLower()
                     select r.RoleID;
             return q.FirstOrDefault();

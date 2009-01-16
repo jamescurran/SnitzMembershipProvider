@@ -1,12 +1,8 @@
 ﻿using System;
 using System.Collections.Specialized;  // for NameValueCollection
 using System.Configuration.Provider;    // for ProviderException
-using System.Linq;
 
 using MbUnit.Framework;
-using MbUnit.Core;
-using MbUnit.Core.Framework;
-using TestCoverage;
 
 using SnitzProvider;
 using System.Web.Security;
@@ -35,7 +31,7 @@ namespace SnitzProvider.UnitTests
             prov.Initialize("SnitzMembershipProvider", nv);
         }
 
-        [TestSubjectMember(MemeberName = "ChangePassword")]
+//        [TestSubjectMember(MemeberName = "ChangePassword")]
         [Test]
         public virtual void ChangePassword()
         {
@@ -74,7 +70,7 @@ namespace SnitzProvider.UnitTests
             }
         }
 
-        [TestSubjectMemberAttribute(MemeberName = "ChangePasswordQuestionAndAnswer")]
+//        [TestSubjectMemberAttribute(MemeberName = "ChangePasswordQuestionAndAnswer")]
         [Test]
         [ExpectedException(typeof(NotImplementedException))]
         public virtual void ChangePasswordQuestionAndAnswer()
@@ -88,7 +84,7 @@ namespace SnitzProvider.UnitTests
             prov.ChangePasswordQuestionAndAnswer(username, password, newPasswordQuestion, newPasswordAnswer);
         }
 
-        [TestSubjectMemberAttribute(MemeberName = "CreateUser")]
+//        [TestSubjectMemberAttribute(MemeberName = "CreateUser")]
         [Test()]
         [ExpectedException(typeof(NotImplementedException))]
         public virtual void CreateUser()
@@ -100,7 +96,7 @@ namespace SnitzProvider.UnitTests
             Assert.AreEqual(MembershipCreateStatus.Success, status);
         }
 
-        [TestSubjectMemberAttribute(MemeberName = "DeleteUser")]
+//        [TestSubjectMemberAttribute(MemeberName = "DeleteUser")]
         [Test()]
         public virtual void DeleteUser()
         {
@@ -110,7 +106,7 @@ namespace SnitzProvider.UnitTests
 
         }
 
-        [TestSubjectMemberAttribute(MemeberName = "FindUsersByEmail")]
+//        [TestSubjectMemberAttribute(MemeberName = "FindUsersByEmail")]
         [Test()]
         public virtual void FindUsersByEmail()
         {
@@ -127,7 +123,7 @@ namespace SnitzProvider.UnitTests
             Assert.AreEqual("James@example.com", array[1].Email);
         }
 
-        [TestSubjectMemberAttribute(MemeberName = "FindUsersByName")]
+//        [TestSubjectMemberAttribute(MemeberName = "FindUsersByName")]
         [Test()]
         public virtual void FindUsersByName()
         {
@@ -144,7 +140,7 @@ namespace SnitzProvider.UnitTests
 
         }
 
-        [TestSubjectMemberAttribute(MemeberName = "GetAllUsers")]
+//        [TestSubjectMemberAttribute(MemeberName = "GetAllUsers")]
         [Test()]
         public virtual void GetAllUsers()
         {
@@ -164,16 +160,16 @@ namespace SnitzProvider.UnitTests
 
 
 
-        [TestSubjectMemberAttribute(MemeberName = "GetNumberOfUsersOnline")]
+//        [TestSubjectMemberAttribute(MemeberName = "GetNumberOfUsersOnline")]
         [Test()]
         public virtual void GetNumberOfUsersOnline()
         {
             prov.Log = Console.Out;
-            Console.WriteLine("NOTE: This will fail is run more than 15 minutes after last run of 'GetUser_byName()'");
+            Console.WriteLine("NOTE: This will fail if run more than 15 minutes after last run of 'GetUser_byName()'");
             Assert.AreEqual(1, prov.GetNumberOfUsersOnline());
         }
 
-        [TestSubjectMemberAttribute(MemeberName = "GetPassword")]
+//        [TestSubjectMemberAttribute(MemeberName = "GetPassword")]
         [Test()]
         [ExpectedException(typeof(NotImplementedException))]
         public virtual void GetPassword()
@@ -186,7 +182,7 @@ namespace SnitzProvider.UnitTests
             prov.GetPassword(username, answer);
         }
 
-        [TestSubjectMemberAttribute(MemeberName = "GetUser")]
+//        [TestSubjectMemberAttribute(MemeberName = "GetUser")]
         [Test()]
         public virtual void GetUser_byKey()
         {
@@ -199,7 +195,7 @@ namespace SnitzProvider.UnitTests
             Assert.AreEqual("forums@example.com", member.Email);
         }
 
-        [TestSubjectMemberAttribute(MemeberName = "GetUser")]
+//        [TestSubjectMemberAttribute(MemeberName = "GetUser")]
         [Test()]
         public virtual void GetUser_byName()
         {
@@ -212,7 +208,7 @@ namespace SnitzProvider.UnitTests
 
         }
 
-        [TestSubjectMemberAttribute(MemeberName = "GetUserNameByEmail")]
+//        [TestSubjectMemberAttribute(MemeberName = "GetUserNameByEmail")]
         [Test()]
         public virtual void GetUserNameByEmail()
         {
@@ -223,7 +219,7 @@ namespace SnitzProvider.UnitTests
 
 
 
-        [TestSubjectMemberAttribute(MemeberName = "ResetPassword")]
+//        [TestSubjectMemberAttribute(MemeberName = "ResetPassword")]
         [Test()]
         [ExpectedException(typeof(NotImplementedException))]
         public virtual void ResetPassword()
@@ -237,7 +233,7 @@ namespace SnitzProvider.UnitTests
             prov.ResetPassword(username, answer);
         }
 
-        [TestSubjectMemberAttribute(MemeberName = "UnlockUser")]
+//        [TestSubjectMemberAttribute(MemeberName = "UnlockUser")]
         [Test()]
         public virtual void UnlockUser()
         {
@@ -247,7 +243,7 @@ namespace SnitzProvider.UnitTests
             Assert.IsTrue(prov.ValidateUser("James", "semaJ"));
         }
 
-        [TestSubjectMemberAttribute(MemeberName = "UpdateUser")]
+//        [TestSubjectMemberAttribute(MemeberName = "UpdateUser")]
         [Test()]
         [ExpectedException(typeof(NotImplementedException))]
         public virtual void UpdateUser()
@@ -256,7 +252,7 @@ namespace SnitzProvider.UnitTests
             prov.UpdateUser(null);
         }
 
-        [TestSubjectMemberAttribute(MemeberName = "ValidateUser")]
+//        [TestSubjectMemberAttribute(MemeberName = "ValidateUser")]
         [RowTest]
         [Row("Admin", "nimdA")]
         [Row("James", "semaJ")]
@@ -267,7 +263,7 @@ namespace SnitzProvider.UnitTests
             Assert.IsTrue(prov.ValidateUser(username,password));
         }
 
-        [TestSubjectMemberAttribute(MemeberName = "ValidateUser")]
+//        [TestSubjectMemberAttribute(MemeberName = "ValidateUser")]
         [Test()]
         public virtual void ValidateUser_Failure()
         {

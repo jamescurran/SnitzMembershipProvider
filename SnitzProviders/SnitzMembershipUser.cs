@@ -1,13 +1,7 @@
 using System;
-using System.Collections.Generic;
-using System.Text;
 using System.Web.Security;
 using System.Data;
 using System.Globalization;
-using Microsoft.Practices.EnterpriseLibrary.Common;
-using Microsoft.Practices.EnterpriseLibrary.Data;
-using System.Web;
-using System.Security.Permissions;
 
 namespace SnitzProvider
 {
